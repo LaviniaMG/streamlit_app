@@ -165,8 +165,9 @@ if page != "Upload & Filtrare":
             st.subheader("Scatter Plot")
             x_col = st.selectbox("Variabila X", numeric_cols)
             y_col = st.selectbox("Variabila Y", numeric_cols, index=1)
-            fig_scatter = px.scatter(df, x=x_col, y=y_col, trendline="ols",
-                                     title=f"{x_col} vs {y_col}")
+            fig_scatter = px.scatter(df, x=x_col, y=y_col,
+                         title=f"{x_col} vs {y_col}")
+
             st.plotly_chart(fig_scatter, use_container_width=True)
 
             st.subheader("Detectie outlieri (IQR)")

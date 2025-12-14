@@ -10,7 +10,7 @@ st.set_page_config(page_title="EDA Titanic", layout="wide")
 # =========================
 # Optiune fisier default
 # =========================
-DEFAULT_FILE = "titanic.csv"  # pune aici calea fisierului default
+DEFAULT_FILE = "titanic.csv" 
 
 # =========================
 # Sidebar cu meniu
@@ -153,7 +153,7 @@ else:
         st.pyplot(fig)
 
     # =========================
-    # Pagina 5 – Corelatii și outlieri
+    # Pagina 5 – corelatii si outlieri
     # =========================
     elif page == "Corelatii si Outlieri":
         st.header("Corelatii si Outlieri")

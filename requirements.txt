@@ -1,8 +1,7 @@
-streamlit>=1.30.0
-pandas>=2.0.0
-numpy>=1.25.0
-plotly>=5.20.0
-statsmodels>=1.2.0
-matplotlib>=3.8.0
-seaborn>=1.2.0
-openpyxl>=3.1.0  
+streamlit==1.30.0
+pandas==2.1.0
+numpy==1.26.0
+plotly==5.21.0
+matplotlib==3.8.0
+seaborn==0.12.3
+openpyxl==3.1.2

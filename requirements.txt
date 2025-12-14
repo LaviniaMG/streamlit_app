@@ -1,7 +1,8 @@
-streamlit==1.29.0
-pandas==2.0.3
-numpy==1.25.0
+streamlit==1.30.0
+pandas==2.0.2
+numpy==1.24.4
 plotly==5.20.0
-matplotlib==3.7.1
+matplotlib==3.7.2
 seaborn==0.12.2
+
 openpyxl==3.1.0

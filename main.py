@@ -4,15 +4,15 @@ import numpy as np
 import plotly.express as px
 import os
 
-st.set_page_config(page_title="EDA Titanic", layout="wide")
+# =========================
+# Config Streamlit
+# =========================
+st.set_page_config(page_title="EDA Titanic", layout="wide", initial_sidebar_state="expanded")
 
-# =========================
-# Fisier default
-# =========================
 DEFAULT_FILE = "titanic.csv"
 
 # =========================
-# Sidebar cu meniu
+# Sidebar & Meniu
 # =========================
 st.sidebar.title("Navigare")
 menu = ["Upload & Filtrare", "Structura Dataset", "Analiza Numerica",
@@ -20,37 +20,36 @@ menu = ["Upload & Filtrare", "Structura Dataset", "Analiza Numerica",
 page = st.sidebar.radio("Selecteaza pagina:", menu)
 
 # =========================
-# Pagina 1 – Upload & Filtrare
+# Upload & Filtrare
 # =========================
 if page == "Upload & Filtrare":
     st.title("EDA – Titanic Dataset")
 
+    # Upload
     file = st.file_uploader("Incarca fisier CSV sau Excel (Titanic)", type=["csv", "xlsx"])
 
-    # initializare session_state pentru df
     if "df" not in st.session_state:
         st.session_state.df = None
 
-    # incarcare fisier
+    # Citire fisier
     if file is not None:
         if file.name.endswith(".csv"):
             st.session_state.df = pd.read_csv(file)
         else:
             st.session_state.df = pd.read_excel(file)
         st.success("Fisier incarcat cu succes!")
-    else:
-        if os.path.exists(DEFAULT_FILE) and st.session_state.df is None:
-            st.session_state.df = pd.read_csv(DEFAULT_FILE)
-            st.info("Se foloseste fisierul default")
+    elif os.path.exists(DEFAULT_FILE) and st.session_state.df is None:
+        st.session_state.df = pd.read_csv(DEFAULT_FILE)
+        st.info("Se foloseste fisierul default")
 
+    # Daca df exista
     if st.session_state.df is not None:
         df = st.session_state.df
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        categorical_cols = df.select_dtypes(include="object").columns.tolist()
 
         st.subheader("Primele 10 randuri")
         st.dataframe(df.head(10))
-
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df.select_dtypes(include="object").columns.tolist()
 
         df_filtrat = df.copy()
 
@@ -67,14 +66,15 @@ if page == "Upload & Filtrare":
                     df_filtrat = df_filtrat[df_filtrat[col].isin(valori)]
 
         st.subheader("Numar randuri")
-        st.write("Initial:", df.shape[0])
-        st.write("Dupa filtrare:", df_filtrat.shape[0])
+        col1, col2 = st.columns(2)
+        col1.metric("Initial", df.shape[0])
+        col2.metric("Dupa filtrare", df_filtrat.shape[0])
 
         st.subheader("Dataset filtrat")
         st.dataframe(df_filtrat)
 
 # =========================
-# Pagini urmatoare
+# Celelalte pagini
 # =========================
 if page != "Upload & Filtrare":
     df = st.session_state.get("df", None)
@@ -89,7 +89,6 @@ if page != "Upload & Filtrare":
         # =========================
         if page == "Structura Dataset":
             st.header("Structura Dataset")
-
             col1, col2 = st.columns(2)
             col1.metric("Numar randuri", df.shape[0])
             col2.metric("Numar coloane", df.shape[1])
@@ -166,8 +165,7 @@ if page != "Upload & Filtrare":
             x_col = st.selectbox("Variabila X", numeric_cols)
             y_col = st.selectbox("Variabila Y", numeric_cols, index=1)
             fig_scatter = px.scatter(df, x=x_col, y=y_col,
-                         title=f"{x_col} vs {y_col}")
-
+                                     title=f"{x_col} vs {y_col}")
             st.plotly_chart(fig_scatter, use_container_width=True)
 
             st.subheader("Detectie outlieri (IQR)")

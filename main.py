@@ -4,9 +4,7 @@ import numpy as np
 import plotly.express as px
 import os
 
-# =========================
-# Config Streamlit
-# =========================
+
 st.set_page_config(page_title="EDA Titanic", layout="wide", initial_sidebar_state="expanded")
 
 DEFAULT_FILE = "titanic.csv"

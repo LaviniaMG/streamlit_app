@@ -4,32 +4,62 @@ import numpy as np
 import plotly.express as px
 import os
 
+# =========================
+# ML imports
+# =========================
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, OneHotEncoder
+from sklearn.feature_selection import SelectKBest, f_classif, f_regression
 
-st.set_page_config(page_title="EDA Titanic", layout="wide", initial_sidebar_state="expanded")
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.svm import SVC, SVR
+
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    confusion_matrix, roc_auc_score,
+    mean_absolute_error, mean_squared_error, r2_score
+)
+
+# =========================
+# App config
+# =========================
+st.set_page_config(
+    page_title="EDA & ML App",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 DEFAULT_FILE = "titanic.csv"
 
 # =========================
-# Sidebar & Meniu
+# Sidebar
 # =========================
 st.sidebar.title("Navigare")
-menu = ["Upload & Filtrare", "Structura Dataset", "Analiza Numerica",
-        "Analiza Categorica", "Corelatii si Outlieri"]
+menu = [
+    "Upload & Filtrare",
+    "Structura Dataset",
+    "Analiza Numerica",
+    "Analiza Categorica",
+    "Corelatii si Outlieri",
+    "ML – Train & Compare"
+]
 page = st.sidebar.radio("Selecteaza pagina:", menu)
 
 # =========================
 # Upload & Filtrare
 # =========================
 if page == "Upload & Filtrare":
-    st.title("EDA – Titanic Dataset")
+    st.title("EDA – Dataset")
 
-    # Upload
-    file = st.file_uploader("Incarca fisier CSV sau Excel (Titanic)", type=["csv", "xlsx"])
+    file = st.file_uploader("Incarca fisier CSV sau Excel", type=["csv", "xlsx"])
 
     if "df" not in st.session_state:
         st.session_state.df = None
 
-    # Citire fisier
     if file is not None:
         if file.name.endswith(".csv"):
             st.session_state.df = pd.read_csv(file)
@@ -40,7 +70,6 @@ if page == "Upload & Filtrare":
         st.session_state.df = pd.read_csv(DEFAULT_FILE)
         st.info("Se foloseste fisierul default")
 
-    # Daca df exista
     if st.session_state.df is not None:
         df = st.session_state.df
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
@@ -49,131 +78,222 @@ if page == "Upload & Filtrare":
         st.subheader("Primele 10 randuri")
         st.dataframe(df.head(10))
 
-        df_filtrat = df.copy()
-
-        with st.expander("Filtrare coloane numerice"):
-            for col in numeric_cols:
-                min_val, max_val = float(df[col].min()), float(df[col].max())
-                interval = st.slider(f"{col}", min_val, max_val, (min_val, max_val))
-                df_filtrat = df_filtrat[(df_filtrat[col] >= interval[0]) & (df_filtrat[col] <= interval[1])]
-
-        with st.expander("Filtrare coloane categorice"):
-            for col in categorical_cols:
-                valori = st.multiselect(f"{col}", df[col].dropna().unique())
-                if valori:
-                    df_filtrat = df_filtrat[df_filtrat[col].isin(valori)]
-
-        st.subheader("Numar randuri")
-        col1, col2 = st.columns(2)
-        col1.metric("Initial", df.shape[0])
-        col2.metric("Dupa filtrare", df_filtrat.shape[0])
-
-        st.subheader("Dataset filtrat")
-        st.dataframe(df_filtrat)
-
 # =========================
-# Celelalte pagini
+# Structura Dataset
 # =========================
-if page != "Upload & Filtrare":
-    df = st.session_state.get("df", None)
+elif page == "Structura Dataset":
+    df = st.session_state.get("df")
     if df is None:
-        st.info("Incarca fisierul pe pagina 'Upload & Filtrare' pentru a vizualiza aceasta sectiune.")
+        st.warning("Incarca datele mai intai.")
+        st.stop()
+
+    st.metric("Randuri", df.shape[0])
+    st.metric("Coloane", df.shape[1])
+
+    st.subheader("Tipuri de date")
+    st.dataframe(pd.DataFrame({"Coloana": df.columns, "Tip": df.dtypes}))
+
+    st.subheader("Valori lipsa (%)")
+    missing_pct = df.isnull().mean() * 100
+    st.dataframe(missing_pct.reset_index(name="Procent (%)"))
+
+# =========================
+# ML – TRAIN & COMPARE
+# =========================
+elif page == "ML – Train & Compare":
+
+    df = st.session_state.get("df")
+    if df is None:
+        st.warning("Incarca datele mai intai.")
+        st.stop()
+
+    st.header("Machine Learning – Train, Evaluate & Compare")
+
+    # =========================
+    # Partea 1 – Problem Setup
+    # =========================
+    st.subheader("Problem Setup")
+
+    target = st.selectbox("Coloana target", df.columns)
+
+    select_all = st.checkbox("Select all features", value=True)
+    if select_all:
+        features = [c for c in df.columns if c != target]
     else:
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-        categorical_cols = df.select_dtypes(include="object").columns.tolist()
+        features = st.multiselect(
+            "Selecteaza feature-urile",
+            [c for c in df.columns if c != target]
+        )
 
-        # =========================
-        # Structura Dataset
-        # =========================
-        if page == "Structura Dataset":
-            st.header("Structura Dataset")
-            col1, col2 = st.columns(2)
-            col1.metric("Numar randuri", df.shape[0])
-            col2.metric("Numar coloane", df.shape[1])
+    problem_type = st.radio("Tip problema", ["Clasificare", "Regresie"])
 
-            st.subheader("Tipuri de date")
-            st.dataframe(pd.DataFrame({"Coloana": df.columns, "Tip": df.dtypes}))
+    # =========================
+    # Partea 2 – Preprocesare
+    # =========================
+    st.subheader("Preprocesare")
 
-            st.subheader("Valori lipsa")
-            missing = df.isnull().sum()
-            missing_pct = (missing / len(df)) * 100
-            missing_df = pd.DataFrame({
-                "Coloana": df.columns,
-                "Valori lipsa": missing.values,
-                "Procent (%)": missing_pct.values
-            })
-            st.dataframe(missing_df)
+    imput_method = st.selectbox(
+        "Metoda imputare numeric",
+        ["mean", "median", "most_frequent"]
+    )
 
-            st.subheader("Vizualizare valori lipsa")
-            fig = px.bar(missing_df, x="Coloana", y="Procent (%)", text="Procent (%)",
-                         labels={"Procent (%)": "% valori lipsa"}, title="Procent valori lipsa per coloana")
-            fig.update_layout(xaxis_tickangle=-45)
-            st.plotly_chart(fig, use_container_width=True)
+    scaler_choice = st.selectbox(
+        "Scalare",
+        ["StandardScaler", "MinMaxScaler", "Fara"]
+    )
 
-            st.subheader("Statistici descriptive")
-            st.dataframe(df[numeric_cols].describe().T)
+    remove_outliers = st.checkbox("Eliminare outlieri (IQR)")
+    use_feature_selection = st.checkbox("Selectie features (SelectKBest)")
 
-        # =========================
-        # Analiza Numerica
-        # =========================
-        elif page == "Analiza Numerica":
-            st.header("Analiza Coloane Numerice")
-            num_col = st.selectbox("Selecteaza coloana numerica", numeric_cols)
-            bins = st.slider("Numar de bins", 10, 100, 30)
+    X = df[features]
+    y = df[target]
 
-            col1, col2 = st.columns(2)
-            fig_hist = px.histogram(df, x=num_col, nbins=bins, marginal="box",
-                                    title=f"Distributia pentru {num_col}")
-            col1.plotly_chart(fig_hist, use_container_width=True)
+    # Eliminare outlieri
+    if remove_outliers:
+        for col in X.select_dtypes(include=np.number).columns:
+            Q1 = X[col].quantile(0.25)
+            Q3 = X[col].quantile(0.75)
+            IQR = Q3 - Q1
+            mask = (X[col] >= Q1 - 1.5 * IQR) & (X[col] <= Q3 + 1.5 * IQR)
+            X = X[mask]
+            y = y[mask]
 
-            col2.metric("Media", f"{df[num_col].mean():.2f}")
-            col2.metric("Mediana", f"{df[num_col].median():.2f}")
-            col2.metric("Deviația standard", f"{df[num_col].std():.2f}")
+    num_cols = X.select_dtypes(include=np.number).columns
+    cat_cols = X.select_dtypes(include="object").columns
 
-        # =========================
-        # Analiza Categorica
-        # =========================
-        elif page == "Analiza Categorica":
-            st.header("Analiza Coloane Categorice")
-            cat_col = st.selectbox("Selecteaza coloana categorica", categorical_cols)
-            freq = df[cat_col].value_counts().reset_index()
-            freq.columns = [cat_col, "Frecventa"]
-            freq["Procent (%)"] = freq["Frecventa"] / len(df) * 100
+    scaler = (
+        StandardScaler() if scaler_choice == "StandardScaler"
+        else MinMaxScaler() if scaler_choice == "MinMaxScaler"
+        else "passthrough"
+    )
 
-            col1, col2 = st.columns(2)
-            col1.dataframe(freq)
-            fig_bar = px.bar(freq, x=cat_col, y="Frecventa", text="Frecventa",
-                             title=f"Distribuția pentru {cat_col}")
-            fig_bar.update_layout(xaxis_tickangle=-45)
-            col2.plotly_chart(fig_bar, use_container_width=True)
+    numeric_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy=imput_method)),
+        ("scaler", scaler)
+    ])
 
-        # =========================
-        # Corelatii si Outlieri
-        # =========================
-        elif page == "Corelatii si Outlieri":
-            st.header("Corelatii si Outlieri")
+    categorical_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("encoder", OneHotEncoder(handle_unknown="ignore"))
+    ])
 
-            st.subheader("Matrice de corelatie")
-            corr = df[numeric_cols].corr()
-            fig_corr = px.imshow(corr, text_auto=True, color_continuous_scale="RdBu_r",
-                                 title="Heatmap corelatii")
-            st.plotly_chart(fig_corr, use_container_width=True)
+    preprocessor = ColumnTransformer([
+        ("num", numeric_pipeline, num_cols),
+        ("cat", categorical_pipeline, cat_cols)
+    ])
 
-            st.subheader("Scatter Plot")
-            x_col = st.selectbox("Variabila X", numeric_cols)
-            y_col = st.selectbox("Variabila Y", numeric_cols, index=1)
-            fig_scatter = px.scatter(df, x=x_col, y=y_col,
-                                     title=f"{x_col} vs {y_col}")
-            st.plotly_chart(fig_scatter, use_container_width=True)
+    # =========================
+    # Partea 3 – Split
+    # =========================
+    st.subheader("Train / Test Split")
+    test_size = st.slider("Test size", 0.1, 0.5, 0.2)
+    random_state = st.number_input("Random state", value=42)
 
-            st.subheader("Detectie outlieri (IQR)")
-            for col in numeric_cols:
-                Q1 = df[col].quantile(0.25)
-                Q3 = df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                lower = Q1 - 1.5 * IQR
-                upper = Q3 + 1.5 * IQR
-                outliers = df[(df[col] < lower) | (df[col] > upper)]
-                st.write(f"{col}: {len(outliers)} outlieri ({len(outliers)/len(df)*100:.2f}%)")
-                fig_box = px.box(df, y=col, points="outliers", title=f"Outlieri pentru {col}")
-                st.plotly_chart(fig_box, use_container_width=True)
+    # =========================
+    # Partea 4 – Models
+    # =========================
+    st.subheader("Models")
+
+    model_names = st.multiselect(
+        "Selecteaza modele",
+        ["Logistic Regression", "Random Forest", "SVM"]
+    )
+
+    models = {}
+
+    if problem_type == "Clasificare":
+        if "Logistic Regression" in model_names:
+            C = st.slider("LogReg C", 0.01, 10.0, 1.0)
+            models["Logistic Regression"] = LogisticRegression(C=C, max_iter=1000)
+
+        if "Random Forest" in model_names:
+            n_estimators = st.slider("RF estimators", 50, 300, 100)
+            max_depth = st.slider("RF max_depth", 2, 20, 5)
+            models["Random Forest"] = RandomForestClassifier(
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                random_state=random_state
+            )
+
+        if "SVM" in model_names:
+            C = st.slider("SVM C", 0.01, 10.0, 1.0)
+            models["SVM"] = SVC(C=C, probability=True)
+
+    else:
+        if "Random Forest" in model_names:
+            models["Random Forest"] = RandomForestRegressor(random_state=random_state)
+        if "SVM" in model_names:
+            models["SVM"] = SVR()
+        if "Logistic Regression" in model_names:
+            models["Linear Regression"] = LinearRegression()
+
+    # =========================
+    # Train & Evaluate
+    # =========================
+    if st.button("Train Models"):
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state
+        )
+
+        results = []
+
+        for name, model in models.items():
+            steps = [("prep", preprocessor)]
+
+            if use_feature_selection:
+                selector = SelectKBest(
+                    f_classif if problem_type == "Clasificare" else f_regression,
+                    k=min(10, X_train.shape[1])
+                )
+                steps.append(("select", selector))
+
+            steps.append(("model", model))
+            pipe = Pipeline(steps)
+
+            pipe.fit(X_train, y_train)
+            y_pred = pipe.predict(X_test)
+
+            st.subheader(name)
+
+            if problem_type == "Clasificare":
+                acc = accuracy_score(y_test, y_pred)
+                prec = precision_score(y_test, y_pred, average="weighted")
+                rec = recall_score(y_test, y_pred, average="weighted")
+                f1 = f1_score(y_test, y_pred, average="weighted")
+
+                y_proba = pipe.predict_proba(X_test)[:, 1] if len(np.unique(y_test)) == 2 else None
+                roc = roc_auc_score(y_test, y_proba) if y_proba is not None else None
+
+                results.append({
+                    "Model": name,
+                    "Accuracy": acc,
+                    "Precision": prec,
+                    "Recall": rec,
+                    "F1": f1,
+                    "ROC-AUC": roc
+                })
+
+                cm = confusion_matrix(y_test, y_pred)
+                st.plotly_chart(px.imshow(cm, text_auto=True, title="Confusion Matrix"))
+
+            else:
+                mae = mean_absolute_error(y_test, y_pred)
+                rmse = mean_squared_error(y_test, y_pred, squared=False)
+                r2 = r2_score(y_test, y_pred)
+
+                results.append({
+                    "Model": name,
+                    "MAE": mae,
+                    "RMSE": rmse,
+                    "R2": r2
+                })
+
+        results_df = pd.DataFrame(results)
+        st.subheader("Comparatie modele")
+        st.dataframe(results_df)
+
+        metric = st.selectbox("Metrica pentru best model", results_df.columns[1:])
+        best_model = results_df.sort_values(metric, ascending=False).iloc[0]["Model"]
+
+        st.success(f"🏆 Best model: {best_model}")
